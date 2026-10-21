@@ -45,6 +45,11 @@ export interface CueConfig {
     /** Use embeddings (one tiny API call per question) in addition to local keyword search. */
     embeddings: boolean
   }
+  screenshot: {
+    /** Which monitor Ctrl+Alt+S captures: the one under the mouse, the primary, or a number. */
+    display: 'cursor' | 'primary' | number
+    max_width: number
+  }
   ui: {
     width: number
     position: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'
@@ -97,6 +102,7 @@ export const DEFAULT_CONFIG: CueConfig = {
     },
     prices: {}
   },
+  screenshot: { display: 'cursor', max_width: 1600 },
   knowledge: { live_context_tokens: 6000, instant_answers: true, instant_min_confidence: 0.6, embeddings: true },
   ui: {
     width: 420,
@@ -192,6 +198,8 @@ export function loadConfig(root: string): { config: CueConfig; file: string } {
   config.gemini.models.fast_fallbacks = asList(config.gemini.models.fast_fallbacks)
   if (config.gemini.tier !== 'paid') config.gemini.tier = 'free'
 
+  const shotDisplay = config.screenshot.display as unknown
+  if (typeof shotDisplay === 'string' && /^\d+$/.test(shotDisplay)) config.screenshot.display = Number(shotDisplay)
   const display = config.ui.display as unknown
   if (typeof display === 'string' && /^\d+$/.test(display)) config.ui.display = Number(display)
   return { config, file }

@@ -11,7 +11,9 @@ import { log, setLogDir } from './log'
 import { Overlay, windowsBuild } from './overlay'
 import { resolvePaths, type CuePaths } from './paths'
 import { loadApiKey, saveEncryptedKey } from './secrets'
+import { screenshotJpeg } from './screen'
 import { runCaptureSelfTest } from './selftest'
+import { WDA_EXCLUDEFROMCAPTURE } from './win32'
 import { LiveKnowledge } from './liveKnowledge'
 import { CueTray } from './tray'
 
@@ -109,6 +111,39 @@ function toggleClickThrough(): void {
   pushState()
 }
 
+/** True when Windows already keeps the overlay out of captures, so no need to hide it first. */
+function overlayExcludedFromCapture(): boolean {
+  if (process.platform !== 'win32') return false
+  const a = overlay.captureAffinity()
+  return a === WDA_EXCLUDEFROMCAPTURE || (a === null && windowsBuild() >= 19041)
+}
+
+let shooting = false
+async function screenshotAnswer(): Promise<void> {
+  if (shooting) return
+  shooting = true
+  const hide = !overlayExcludedFromCapture() && overlay.win.isVisible()
+  try {
+    if (hide) {
+      overlay.win.hide()
+      await new Promise((r) => setTimeout(r, 180))
+    }
+    const shot = await screenshotJpeg(config.screenshot.display, config.screenshot.max_width)
+    if (hide) overlay.show()
+    log.info(`screenshot ${shot.width}x${shot.height}, ${Math.round(shot.data.length / 1024)} KB`)
+    onScreenshot?.(shot.data)
+    void engine.ask({ trigger: 'screenshot', image: { data: shot.data, mimeType: shot.mimeType } })
+  } catch (err) {
+    if (hide) overlay.show()
+    notify('error', `Screenshot failed: ${(err as Error).message}`)
+  } finally {
+    shooting = false
+  }
+}
+
+/** Phase 7 hooks this to save screenshots into the session folder when enabled. */
+let onScreenshot: ((jpeg: Buffer) => void) | null = null
+
 async function selfTest(): Promise<void> {
   const res = await runCaptureSelfTest(overlay, (on) => {
     selfTestPattern = on
@@ -121,7 +156,7 @@ async function selfTest(): Promise<void> {
 function hotkeyHandlers(): Partial<Record<HotkeyAction, () => void>> {
   return {
     answer_now: () => void engine.ask({ trigger: 'hotkey' }),
-    screenshot_answer: () => notify('info', 'Screenshot + answer arrives in Phase 3.'),
+    screenshot_answer: () => void screenshotAnswer(),
     toggle_overlay: () => overlay.toggle(),
     toggle_listening: toggleListening,
     move_up: () => overlay.move(0, -1),

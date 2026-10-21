@@ -13,11 +13,13 @@ export interface CardState {
   prepared?: { text: string; matched: string; confidence: number; source: 'qa' | 'notes' }
 }
 
-/** Renders **bold** spans without touching innerHTML. */
+/** Renders **bold** and `code` spans without touching innerHTML. */
 function inline(text: string): ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*)/g).map((seg, i) =>
-    seg.startsWith('**') && seg.endsWith('**') && seg.length > 4 ? <strong key={i}>{seg.slice(2, -2)}</strong> : seg
-  )
+  return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((seg, i) => {
+    if (seg.startsWith('**') && seg.endsWith('**') && seg.length > 4) return <strong key={i}>{inline(seg.slice(2, -2))}</strong>
+    if (seg.startsWith('`') && seg.endsWith('`') && seg.length > 2) return <code key={i}>{seg.slice(1, -1)}</code>
+    return seg
+  })
 }
 
 function Line({ line, first }: { line: string; first: boolean }) {

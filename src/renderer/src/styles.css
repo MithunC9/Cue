@@ -240,6 +240,15 @@ body {
   padding-left: 0.2em;
 }
 
+.card code {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 0.86em;
+  color: #e2e8f0;
+  background: rgba(148, 163, 184, 0.14);
+  border-radius: 4px;
+  padding: 0 3px;
+}
+
 .card .deeper {
   color: #cbd5e1;
   font-size: 0.92em;
