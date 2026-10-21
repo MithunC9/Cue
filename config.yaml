@@ -1,0 +1,91 @@
+# Cue configuration
+#
+# Windows paths: use SINGLE quotes ('C:\Users\Mithun\My Repo') or forward slashes.
+# Inside "double quotes" YAML treats backslashes as escapes, so you'd have to double every one of them.
+# %USERPROFILE%, %APPDATA% and other %VARS% are expanded. Spaces in folder names are fine.
+
+meeting:
+  me: "Mithun"
+  with: "<professor name>, Cornell SCALE Lab"
+  topic: "microCT pipeline progress update"
+
+# ---------------------------------------------------------------------------
+# Knowledge sources (used by `npm run prep`, Phase 2). Fill these in.
+# ---------------------------------------------------------------------------
+sources:
+  repos: []          # e.g. ['C:\Users\Mithun\code\scale-microct']
+  docs: []           # folders of papers / notes / lab docs
+  deck: ""           # your presentation .pptx or .pdf
+  claude_code: ""    # e.g. '%USERPROFILE%\.claude\projects\C--Users-Mithun-code-scale-microct'
+  codex: '%USERPROFILE%\.codex\sessions'   # filtered to the repo path / keywords below
+  chat_exports: []   # optional claude.ai / ChatGPT export .json files
+
+keywords: [microCT, SCANCO, segmentation, DICOM, TD-309, Abaqus, FEM, SCALE, compression, ROI, voxel]
+
+# ---------------------------------------------------------------------------
+# Gemini
+# ---------------------------------------------------------------------------
+gemini:
+  # free | paid. On the free tier Cue skips explicit context caching (not offered on free keys),
+  # retrieves only the relevant notes per question, and budgets requests so the meeting doesn't run dry.
+  tier: free
+
+  models:
+    brain: gemini-3.6-flash
+    # Tried in order when the model above is out of quota (HTTP 429) or overloaded (503).
+    # Free-tier quotas are per model, so each fallback adds its own daily allowance.
+    brain_fallbacks: [gemini-3.8-flash, gemini-3.5-flash-lite]
+    fast: gemini-3.5-flash-lite
+    fast_fallbacks: [gemini-3.1-flash-lite]
+    # Live transcription. gemini-3.5-transcribe-live is Google's transcription-only Live model:
+    # text out, never audio. gemini-3.1-flash-live-preview is now a legacy native-audio dialog model.
+    ears: gemini-3.5-transcribe-live
+    embed: gemini-embedding-001
+
+  thinking:
+    live: low        # live answers: speed over depth
+    prep: high       # brief / Q&A bank / gaps
+    fast: minimal    # classifier
+
+  # Requests-per-minute / requests-per-day Cue allows itself per model. Google no longer publishes
+  # free-tier numbers. Check yours in AI Studio (aistudio.google.com, Usage & limits) and
+  # edit these. Counters reset at midnight Pacific time, like Google's.
+  quotas:
+    gemini-3.6-flash:      { rpm: 5,   rpd: 20 }
+    gemini-3.8-flash:      { rpm: 5,   rpd: 20 }
+    gemini-3.5-flash-lite: { rpm: 15,  rpd: 500 }
+    gemini-3.1-flash-lite: { rpm: 15,  rpd: 500 }
+    gemini-embedding-001:  { rpm: 100, rpd: 1000 }
+
+  # Only used on the paid tier for the session-cost estimate (USD per 1M tokens).
+  # Copy current numbers from https://ai.google.dev/gemini-api/docs/pricing if you switch to paid.
+  prices: {}
+
+# ---------------------------------------------------------------------------
+# Overlay
+# ---------------------------------------------------------------------------
+ui:
+  width: 420
+  position: top-right    # top-right | top-left | bottom-right | bottom-left
+  display: primary       # primary | cursor | <monitor number starting at 1>
+  margin: 16
+  material: auto         # auto (acrylic on Windows 11 22H2+) | acrylic | mica | translucent
+  font_size: 17
+  start_click_through: true
+
+# Global hotkeys. Avoids Zoom's Alt+key / Alt+Shift+key defaults, VS Code's Ctrl+Shift+P and
+# Ctrl+Shift+arrows, and Ctrl+Alt+arrows (screen rotation on some graphics drivers).
+# Any hotkey that fails to register is listed at the top of the overlay.
+hotkeys:
+  answer_now: Ctrl+Alt+Enter
+  screenshot_answer: Ctrl+Alt+S
+  toggle_overlay: Ctrl+Alt+H
+  toggle_listening: Ctrl+Alt+L
+  move_up: Ctrl+Alt+Shift+Up
+  move_down: Ctrl+Alt+Shift+Down
+  move_left: Ctrl+Alt+Shift+Left
+  move_right: Ctrl+Alt+Shift+Right
+  clear: Ctrl+Alt+K
+  type_mode: Ctrl+Alt+T
+  presentation_mode: Ctrl+Alt+P
+  click_through: Ctrl+Alt+M

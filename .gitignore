@@ -1,0 +1,17 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# private data: never commit
+knowledge/*
+!knowledge/.gitkeep
+sessions/*
+!sessions/.gitkeep
+
+# build output
+node_modules/
+out/
+dist/
+release/
+*.log

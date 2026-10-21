@@ -1,0 +1,309 @@
+:root {
+  --fs: 17px;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --me: #7dd3fc;
+  --them: #fcd34d;
+  --accent: #38bdf8;
+  --warn: #fbbf24;
+  --err: #f87171;
+  --ok: #4ade80;
+  --line: rgba(148, 163, 184, 0.18);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.panel {
+  position: relative;
+  font-size: var(--fs);
+  line-height: 1.38;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Plain translucent dark glass: always works, any Windows version. */
+.material-translucent {
+  background: rgba(15, 23, 42, 0.86);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* DWM draws acrylic/mica behind the page; keep only a light tint for contrast. */
+.material-acrylic,
+.material-mica {
+  background: rgba(2, 6, 23, 0.45);
+}
+
+.selftest {
+  position: absolute;
+  inset: 0;
+  background: #ff00ff;
+  z-index: 100;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 4px 6px;
+  font-size: 0.72em;
+  color: var(--muted);
+}
+
+.handle {
+  cursor: grab;
+  padding: 2px 6px;
+  border-radius: 6px;
+  letter-spacing: -2px;
+  color: #64748b;
+}
+
+.handle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.title {
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+
+.chip {
+  padding: 0 6px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.18);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.9em;
+}
+
+.chip.dim {
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--muted);
+}
+
+.listen {
+  margin-left: auto;
+}
+
+.listen.on {
+  color: var(--err);
+  font-weight: 600;
+}
+
+.banner {
+  margin: 2px 10px 4px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  font-size: 0.72em;
+  line-height: 1.3;
+  cursor: default;
+}
+
+.banner.info {
+  background: rgba(56, 189, 248, 0.12);
+  color: #bae6fd;
+}
+
+.banner.warn {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fde68a;
+}
+
+.banner.error {
+  background: rgba(248, 113, 113, 0.16);
+  color: #fecaca;
+}
+
+.transcript {
+  padding: 2px 12px 6px;
+  font-size: 0.78em;
+  border-bottom: 1px solid var(--line);
+}
+
+.transcript.empty {
+  color: #64748b;
+  font-style: italic;
+}
+
+.tline {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tline .who {
+  flex: none;
+  font-weight: 700;
+  font-size: 0.85em;
+  padding-top: 1px;
+}
+
+.tline .said {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tline.me .who {
+  color: var(--me);
+}
+
+.tline.them .who {
+  color: var(--them);
+}
+
+.tline.them .said {
+  color: #fef3c7;
+}
+
+.tline.interim .said {
+  opacity: 0.65;
+}
+
+.inputbox {
+  padding: 8px 10px 4px;
+}
+
+.inputbox textarea,
+.inputbox input {
+  width: 100%;
+  font: inherit;
+  font-size: 0.9em;
+  color: var(--text);
+  background: rgba(2, 6, 23, 0.7);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 6px 8px;
+  outline: none;
+  resize: none;
+  user-select: text;
+}
+
+.card {
+  padding: 8px 12px 10px;
+}
+
+.card.idle {
+  color: #64748b;
+  font-size: 0.75em;
+}
+
+.card .q {
+  font-size: 0.7em;
+  color: var(--muted);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card .trig {
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+
+.card .lead strong {
+  color: #fff;
+}
+
+.card .lead {
+  margin-bottom: 3px;
+}
+
+.card.unverified .lead.first strong {
+  color: var(--warn);
+}
+
+.card .bullet {
+  padding-left: 0.2em;
+}
+
+.card .deeper {
+  color: #cbd5e1;
+  font-size: 0.92em;
+  margin-top: 3px;
+}
+
+.card .clarify {
+  color: var(--them);
+  font-size: 0.88em;
+  margin-top: 3px;
+}
+
+.card .sources {
+  margin-top: 5px;
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 0.62em;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.card .thinking {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.card .err {
+  color: #fecaca;
+  font-size: 0.85em;
+}
+
+.card.streaming {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.slide {
+  padding: 6px 12px;
+  border-top: 1px solid var(--line);
+  font-size: 0.8em;
+}
+
+.slide.empty {
+  color: #64748b;
+  font-style: italic;
+}
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 4px 12px 6px;
+  font-size: 0.62em;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.status .dot {
+  color: #475569;
+}
+
+.status .dot.on {
+  color: var(--err);
+}
+
+.status .warn {
+  color: var(--warn);
+}
