@@ -132,6 +132,7 @@ export class AnswerEngine {
         chain: gem.brainChain,
         signal: ac.signal,
         maxWaitMs: 1500,
+        firstTokenTimeoutMs: cfg.gemini.first_token_timeout_ms,
         onSkip: (m) => log.warn(`answer #${id}: skipped ${m}`),
         onText: (text) => {
           const now = performance.now()

@@ -1,7 +1,7 @@
-# Cue configuration
+# Cue configuration. After editing: tray icon → Reload config.yaml.
 #
 # Windows paths: use SINGLE quotes ('C:\Users\Mithun\My Repo') or forward slashes.
-# Inside "double quotes" YAML treats backslashes as escapes, so you'd have to double every one of them.
+# Inside "double quotes" YAML treats backslashes as escapes, so you'd have to double every one.
 # %USERPROFILE%, %APPDATA% and other %VARS% are expanded. Spaces in folder names are fine.
 
 meeting:
@@ -10,46 +10,46 @@ meeting:
   topic: "microCT pipeline progress update"
 
 # ---------------------------------------------------------------------------
-# Knowledge sources (used by `npm run prep`, Phase 2). Fill these in.
+# Knowledge sources for `npm run prep` (or tray → Prepare knowledge). Fill these in.
 # ---------------------------------------------------------------------------
 sources:
   repos: []          # e.g. ['C:\Users\Mithun\code\scale-microct']
-  docs: []           # folders of papers / notes / lab docs
-  deck: ""           # your presentation .pptx or .pdf
+  docs: []           # folders of papers / notes / lab docs (pdf, docx, pptx, md, txt, ipynb)
+  deck: ""           # your presentation: 'C:\Users\Mithun\Desktop\progress update.pptx' (or .pdf)
   claude_code: ""    # e.g. '%USERPROFILE%\.claude\projects\C--Users-Mithun-code-scale-microct'
-  codex: '%USERPROFILE%\.codex\sessions'   # filtered to the repo path / keywords below
-  chat_exports: []   # optional claude.ai / ChatGPT export .json files
+  codex: '%USERPROFILE%\.codex\sessions'   # only sessions about the repo / keywords are kept
+  chat_exports: []   # optional claude.ai / ChatGPT export: the conversations.json file or its folder
 
+# Used to keep relevant chat sessions, to rank notes for prep, and as transcription hints.
 keywords: [microCT, SCANCO, segmentation, DICOM, TD-309, Abaqus, FEM, SCALE, compression, ROI, voxel]
 
 # ---------------------------------------------------------------------------
 # Gemini
 # ---------------------------------------------------------------------------
 gemini:
-  # free | paid. On the free tier Cue skips explicit context caching (not offered on free keys),
-  # retrieves only the relevant notes per question, and budgets requests so the meeting doesn't run dry.
+  # free | paid. Free: no explicit context cache (Google allows 0 cached tokens on free keys),
+  # notes are retrieved per question, and requests are budgeted below.
   tier: free
 
   models:
     brain: gemini-3.6-flash
-    # Tried in order when the model above is out of quota (HTTP 429) or overloaded (503).
+    # Tried in order when a model is out of quota (429) or overloaded (503).
     # Free-tier quotas are per model, so each fallback adds its own daily allowance.
     brain_fallbacks: [gemini-3.8-flash, gemini-3.5-flash-lite]
     fast: gemini-3.5-flash-lite
     fast_fallbacks: [gemini-3.1-flash-lite]
-    # Live transcription. gemini-3.5-transcribe-live is Google's transcription-only Live model:
-    # text out, never audio. gemini-3.1-flash-live-preview is now a legacy native-audio dialog model.
+    # Live API transcription-only model (text out, never audio).
     ears: gemini-3.5-transcribe-live
     embed: gemini-embedding-001
 
   thinking:
-    live: low        # live answers: speed over depth
-    prep: high       # brief / Q&A bank / gaps
-    fast: minimal    # classifier
+    live: low        # live answers: speed over depth (minimal is faster still)
+    prep: high       # brief / Q&A bank / gaps / slide notes / debrief
+    fast: minimal    # question classifier, slide matcher
 
-  # Requests-per-minute / requests-per-day Cue allows itself per model. Google no longer publishes
-  # free-tier numbers. Check yours in AI Studio (aistudio.google.com, Usage & limits) and
-  # edit these. Counters reset at midnight Pacific time, like Google's.
+  # Requests per minute / per day Cue allows itself per model. Google no longer publishes free-tier
+  # numbers: check yours at aistudio.google.com → Usage & limits and edit these.
+  # Counters reset at midnight Pacific, like Google's.
   quotas:
     gemini-3.6-flash:      { rpm: 5,   rpd: 20 }
     gemini-3.8-flash:      { rpm: 5,   rpd: 20 }
@@ -57,9 +57,58 @@ gemini:
     gemini-3.1-flash-lite: { rpm: 15,  rpd: 500 }
     gemini-embedding-001:  { rpm: 100, rpd: 1000 }
 
-  # Only used on the paid tier for the session-cost estimate (USD per 1M tokens).
-  # Copy current numbers from https://ai.google.dev/gemini-api/docs/pricing if you switch to paid.
+  # Live answers: if a model hasn't started answering after this long, try the next one.
+  # (Free-tier queues sometimes stall one model for 40 s+ while another answers in 7 s.)
+  first_token_timeout_ms: 12000
+
+  # Paid tier only, for the session-cost estimate (USD per 1M tokens), e.g.
+  #   gemini-3.6-flash: { input: 0.0, output: 0.0 }
+  # Copy current numbers from https://ai.google.dev/gemini-api/docs/pricing
   prices: {}
+
+# ---------------------------------------------------------------------------
+# Live answers
+# ---------------------------------------------------------------------------
+knowledge:
+  live_context_tokens: 6000     # notes sent with each question (brief + best chunks); smaller = faster
+  instant_answers: true         # show the prepared qa_bank answer instantly when a question matches
+  instant_min_confidence: 0.6
+  embeddings: true              # one tiny extra call per question to match by meaning, not just words
+
+auto_answer:
+  enabled: true
+  fast: ambiguous               # ask FAST "is this a question for me?": ambiguous | always | never
+  merge_ms: 900                 # wait after they stop talking so follow-up sentences merge in
+  fast_timeout_ms: 6000
+
+# ---------------------------------------------------------------------------
+# Audio
+# ---------------------------------------------------------------------------
+audio:
+  transcription: live           # live (Gemini Live API) | chunked (one request per utterance, slower)
+  chunked_fallback: true        # switch to chunked automatically if Live keeps failing
+  chunked_model: gemini-3.5-transcribe
+  language: en-US
+  vocabulary: [Otsu, Dice, microCT, SCANCO, TD-309, Abaqus, DICOM, voxel, ROI, porosity, memmap]
+  mic_device: default           # or pick one from the tray → Microphone
+  them_source: loopback         # loopback = everything Windows plays (set Zoom's speaker to "Same as System") | none
+  mic_processing: true          # noise suppression + auto gain on your mic
+  headphones: true              # false if you're on speakers: drops mic lines that echo the other side
+
+# ---------------------------------------------------------------------------
+# Screen
+# ---------------------------------------------------------------------------
+presentation:
+  display: primary              # monitor showing your slides: primary | cursor | 1 | 2 …
+  interval_ms: 3000
+  use_fast: true                # let FAST look at the screen when OCR can't tell the slide
+
+screenshot:
+  display: cursor               # monitor Ctrl+Alt+S captures: cursor | primary | 1 | 2 …
+  max_width: 1600
+
+sessions:
+  save_screenshots: false       # keep Ctrl+Alt+S screenshots in the session folder
 
 # ---------------------------------------------------------------------------
 # Overlay
@@ -73,7 +122,7 @@ ui:
   font_size: 17
   start_click_through: true
 
-# Global hotkeys. Avoids Zoom's Alt+key / Alt+Shift+key defaults, VS Code's Ctrl+Shift+P and
+# Global hotkeys. They avoid Zoom's Alt+key / Alt+Shift+key defaults, VS Code's Ctrl+Shift+P and
 # Ctrl+Shift+arrows, and Ctrl+Alt+arrows (screen rotation on some graphics drivers).
 # Any hotkey that fails to register is listed at the top of the overlay.
 hotkeys:

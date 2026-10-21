@@ -23,6 +23,12 @@ export interface StreamRequest {
   /** Prep: wait out a short per-minute 429 on the same model instead of falling back. */
   retrySameMs?: number
   onSkip?: (message: string) => void
+  /**
+   * Live answers: give up on a model that hasn't produced its first token after this long and try the
+   * next one (free-tier queues can stall for 40 s+ on one model while another answers in 7 s).
+   * The last model in the chain always gets unlimited time.
+   */
+  firstTokenTimeoutMs?: number
   /** Paid tier: an explicit cache holding the system prompt + knowledge, valid for one model. */
   cache?: { model: string; name: string; contents: Content[] }
   onText?: (fullText: string) => void
@@ -51,26 +57,49 @@ function requestFor(model: string, req: Pick<StreamRequest, 'system' | 'contents
   return { model, contents: cached ? req.cache!.contents : req.contents, config }
 }
 
-async function open(gem: Gemini, model: string, req: StreamRequest) {
+export class FirstTokenTimeout extends Error {}
+
+async function open(gem: Gemini, model: string, req: StreamRequest, timeoutMs: number) {
+  // Per-attempt abort so a stalled model can be abandoned without cancelling the whole answer.
+  const attempt = new AbortController()
+  const onOuter = () => attempt.abort(req.signal.reason)
+  req.signal.addEventListener('abort', onOuter, { once: true })
+  let timer: NodeJS.Timeout | undefined
   try {
-    const stream = await gem.ai.models.generateContentStream(requestFor(model, req))
+    const stream = await gem.ai.models.generateContentStream(requestFor(model, { ...req, signal: attempt.signal }))
     const it = stream[Symbol.asyncIterator]()
-    // Pull the first chunk here so quota/overload errors surface inside withFallback.
-    const first = await it.next()
+    // Pull the first chunk here so quota/overload errors (and stalls) surface inside withFallback.
+    const firstChunk = it.next()
+    const first = timeoutMs
+      ? await Promise.race([
+          firstChunk,
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+              attempt.abort(new FirstTokenTimeout('first token timeout'))
+              reject(new FirstTokenTimeout(`no first token after ${Math.round(timeoutMs / 1000)} s`))
+            }, timeoutMs)
+          })
+        ])
+      : await firstChunk
     return { it, first }
   } catch (err) {
+    if (err instanceof FirstTokenTimeout) throw err
     const e = parseApiError(err)
     if (e.status === 400 && /thinking/i.test(e.message) && !noThinking.has(model)) {
       noThinking.add(model)
-      return open(gem, model, req)
+      return open(gem, model, req, timeoutMs)
     }
     throw err
+  } finally {
+    if (timer) clearTimeout(timer)
   }
 }
 
 export async function streamBrain(gem: Gemini, req: StreamRequest): Promise<StreamResult> {
   const t0 = performance.now()
-  const { model, value } = await withFallback(gem.quota, req.chain, (m) => open(gem, m, req), {
+  const chain = [...new Set(req.chain)]
+  const lastModel = chain[chain.length - 1]
+  const { model, value } = await withFallback(gem.quota, chain, (m) => open(gem, m, req, m === lastModel ? 0 : (req.firstTokenTimeoutMs ?? 0)), {
     maxWaitMs: req.maxWaitMs,
     signal: req.signal,
     retrySameMs: req.retrySameMs,

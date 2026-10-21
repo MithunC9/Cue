@@ -34,6 +34,8 @@ export interface CueConfig {
     }
     thinking: { live: ThinkingLevel; prep: ThinkingLevel; fast: ThinkingLevel }
     quotas: Record<string, ModelQuota>
+    /** Live answers: move to the next model if this one is silent this long (0 = wait forever). */
+    first_token_timeout_ms: number
     prices: Record<string, { input: number; output: number }>
   }
   knowledge: {
@@ -136,6 +138,7 @@ export const DEFAULT_CONFIG: CueConfig = {
       'gemini-3.1-flash-lite': { rpm: 15, rpd: 500 },
       'gemini-embedding-001': { rpm: 100, rpd: 1000 }
     },
+    first_token_timeout_ms: 12000,
     prices: {}
   },
   auto_answer: { enabled: true, fast: 'ambiguous', merge_ms: 900, fast_timeout_ms: 6000 },

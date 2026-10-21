@@ -164,3 +164,40 @@ test('withFallback treats a stream cut off before the first token as retryable',
   assert.equal(r.model, 'b')
   assert.ok(q.check('a').ok, 'a network/parse failure does not block the model')
 })
+
+test('streamBrain abandons a model that stalls before its first token and uses the next one', async () => {
+  const { gem } = fakeGem(async function* (model) {
+    if (model === 'stalls') await new Promise((r) => setTimeout(r, 5000))
+    yield { text: `answer from ${model}` }
+  })
+  const t0 = Date.now()
+  const r = await streamBrain(gem, {
+    system: 's',
+    contents: [{ role: 'user', parts: [{ text: 'q' }] }],
+    thinking: 'low',
+    chain: ['stalls', 'quick'],
+    signal: new AbortController().signal,
+    maxWaitMs: 0,
+    firstTokenTimeoutMs: 200
+  })
+  assert.equal(r.model, 'quick')
+  assert.equal(r.text, 'answer from quick')
+  assert.ok(Date.now() - t0 < 1500)
+})
+
+test('the last model in the chain is never timed out', async () => {
+  const { gem } = fakeGem(async function* (model) {
+    await new Promise((r) => setTimeout(r, 400))
+    yield { text: `slow ${model}` }
+  })
+  const r = await streamBrain(gem, {
+    system: 's',
+    contents: [{ role: 'user', parts: [{ text: 'q' }] }],
+    thinking: 'low',
+    chain: ['only'],
+    signal: new AbortController().signal,
+    maxWaitMs: 0,
+    firstTokenTimeoutMs: 100
+  })
+  assert.equal(r.text, 'slow only')
+})
