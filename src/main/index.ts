@@ -3,6 +3,8 @@ import { app, globalShortcut, ipcMain, shell } from 'electron'
 import path from 'node:path'
 import type { AnswerEvent, InputMode, Notice, UiState } from '../shared/types'
 import { AnswerEngine } from './answers'
+import { AudioCapture } from './audio/capture'
+import { Listener } from './audio/listener'
 import { ConfigError, DEFAULT_CONFIG, loadConfig, type CueConfig, type HotkeyAction } from './config'
 import { MeetingContext } from './context'
 import { Gemini } from './gemini/client'
@@ -15,6 +17,7 @@ import { screenshotJpeg } from './screen'
 import { runCaptureSelfTest } from './selftest'
 import { WDA_EXCLUDEFROMCAPTURE } from './win32'
 import { LiveKnowledge } from './liveKnowledge'
+import { Settings } from './settings'
 import { CueTray } from './tray'
 
 if (!app.requestSingleInstanceLock()) {
@@ -39,6 +42,14 @@ const notices: Notice[] = []
 let noticeSeq = 0
 
 let knowledge: LiveKnowledge
+let capture: AudioCapture
+let listener: Listener
+let settings: Settings
+
+function rendererUrl(page: string): { url?: string; file: string } {
+  const dev = process.env.ELECTRON_RENDERER_URL
+  return !app.isPackaged && dev ? { url: `${dev}/${page}`, file: '' } : { file: path.join(__dirname, `../renderer/${page}`) }
+}
 
 function notify(level: Notice['level'], text: string): void {
   notices.push({ id: ++noticeSeq, level, text })
@@ -52,7 +63,7 @@ function uiState(): UiState {
     inputMode,
     presentation,
     listening,
-    listeningAvailable: false, // Phase 4
+    listeningAvailable: true,
     hotkeyFailures,
     quota: gem?.usage() ?? { brain: [], fast: [] },
     tier: config.gemini.tier,
@@ -102,7 +113,40 @@ function togglePresentation(): void {
 }
 
 function toggleListening(): void {
-  notify('info', 'Listening arrives in Phase 4 (mic + Zoom audio).')
+  if (!gem) {
+    notify('warn', 'Set a Gemini API key first (tray → Set API key).')
+    return
+  }
+  listener.toggle()
+}
+
+function setupAudio(): void {
+  capture = new AudioCapture(path.join(__dirname, '../preload/audio.js'), async () => {
+    const r = rendererUrl('audio.html')
+    if (r.url) await capture.window?.loadURL(r.url)
+    else await capture.window?.loadFile(r.file)
+  })
+  listener = new Listener(capture, () => gem, () => config, ctx, () => settings.data.micDeviceId ?? config.audio.mic_device)
+  listener.testFiles = { me: process.env.CUE_TEST_ME_WAV, them: process.env.CUE_TEST_THEM_WAV }
+  listener.on('transcript', (lines) => {
+    if (!overlay.win.isDestroyed()) overlay.win.webContents.send('cue:transcript', lines.slice(-3))
+  })
+  let lastLevels = 0
+  listener.on('levels', (me, them) => {
+    const now = Date.now()
+    if (now - lastLevels < 140 || overlay.win.isDestroyed()) return
+    lastLevels = now
+    overlay.win.webContents.send('cue:levels', [me, them])
+  })
+  listener.on('state', (on) => {
+    listening = on
+    tray.setListening(on)
+    buildTrayMenu()
+    pushState()
+    log.info(on ? 'listening started' : 'listening stopped')
+  })
+  listener.on('warn', (text) => notify('warn', text))
+  capture.on('devices', () => buildTrayMenu())
 }
 
 function toggleClickThrough(): void {
@@ -186,9 +230,30 @@ function applyConfig(): void {
   pushState()
 }
 
+function micMenu(): Electron.MenuItemConstructorOptions[] {
+  const current = settings.data.micDeviceId ?? config.audio.mic_device
+  const devices = capture?.devices.length ? capture.devices : [{ deviceId: 'default', label: 'Windows default microphone' }]
+  return devices.map((d) => ({
+    label: d.deviceId === 'default' ? `Default: ${d.label.replace(/^Default - /, '')}` : d.label,
+    type: 'radio' as const,
+    checked: d.deviceId === current,
+    click: () => {
+      settings.set({ micDeviceId: d.deviceId, micLabel: d.label })
+      if (listening) {
+        listener.stop()
+        setTimeout(() => void listener.start(), 300)
+      }
+      buildTrayMenu()
+    }
+  }))
+}
+
 function buildTrayMenu(): void {
   const h = config.hotkeys
   tray.setMenu([
+    { label: `${listening ? 'Pause listening' : 'Start listening'}\t${h.toggle_listening}`, click: toggleListening },
+    { label: 'Microphone', submenu: micMenu() },
+    { type: 'separator' },
     { label: `Show / hide overlay\t${h.toggle_overlay}`, click: () => overlay.toggle() },
     { label: `Click-through\t${h.click_through}`, type: 'checkbox', checked: overlay.clickThrough, click: toggleClickThrough },
     { label: `Type a question\t${h.type_mode}`, click: () => setInputMode('type') },
@@ -257,6 +322,7 @@ app.whenReady().then(() => {
   app.setAppUserModelId('local.cue.copilot')
   paths = resolvePaths()
   setLogDir(paths.logs)
+  settings = Settings.at(paths.userData)
   const build = windowsBuild()
   log.info(`Cue ${app.getVersion()} starting; home=${paths.home}; platform=${process.platform}; windows build=${build || 'n/a'}`)
 
@@ -279,6 +345,7 @@ app.whenReady().then(() => {
 
   tray = new CueTray('Cue: meeting copilot')
   tray.onClick(() => overlay.toggle())
+  setupAudio()
   wireIpc()
   setupGemini()
   knowledge.load()
@@ -295,12 +362,19 @@ app.whenReady().then(() => {
     overlay.show()
     // CUE_SELFTEST=1 runs the screen-capture check right after start (same as the tray item).
     if (process.env.CUE_SELFTEST === '1') setTimeout(() => void selfTest(), 1500)
+    // CUE_AUTOLISTEN=1 starts listening right away (handy with the CUE_TEST_*_WAV debug inputs).
+    if (process.env.CUE_AUTOLISTEN === '1') setTimeout(() => toggleListening(), 800)
+    void capture.refreshDevices()
   })
-  const url = process.env.ELECTRON_RENDERER_URL
-  if (!app.isPackaged && url) void overlay.win.loadURL(url)
-  else void overlay.win.loadFile(path.join(__dirname, '../renderer/index.html'))
+  const r = rendererUrl('index.html')
+  if (r.url) void overlay.win.loadURL(r.url)
+  else void overlay.win.loadFile(r.file)
 })
 
 app.on('second-instance', () => overlay?.show())
-app.on('will-quit', () => globalShortcut.unregisterAll())
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
+  listener?.stop()
+  capture?.destroy()
+})
 app.on('window-all-closed', () => app.quit())

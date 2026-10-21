@@ -95,6 +95,7 @@ export interface CueBridge {
   onState(cb: (s: UiState) => void): () => void
   onAnswer(cb: (e: AnswerEvent) => void): () => void
   onTranscript(cb: (lines: TranscriptLine[]) => void): () => void
+  onLevels(cb: (me: number, them: number) => void): () => void
   ready(): void
   ask(text: string): void
   submitApiKey(key: string): void

@@ -50,6 +50,12 @@ export class MeetingContext {
       .join('\n')
   }
 
+  /** Removes the speaker's in-progress line (used for dropped echoes). */
+  dropOpen(speaker: Speaker): void {
+    const i = this.lines.findLastIndex((l) => l.speaker === speaker && !l.final)
+    if (i >= 0) this.lines.splice(i, 1)
+  }
+
   clear(): void {
     this.lines = []
   }

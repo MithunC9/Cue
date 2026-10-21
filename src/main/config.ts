@@ -45,6 +45,23 @@ export interface CueConfig {
     /** Use embeddings (one tiny API call per question) in addition to local keyword search. */
     embeddings: boolean
   }
+  audio: {
+    /** live = Gemini Live API (fast); chunked = one request per utterance (slower, fallback). */
+    transcription: 'live' | 'chunked'
+    chunked_fallback: boolean
+    chunked_model: string
+    /** BCP-47 hint, e.g. en-US. Empty = auto-detect. */
+    language: string
+    /** Extra words to recognize (your name and `keywords` are always included). */
+    vocabulary: string[]
+    mic_device: string
+    /** loopback = Windows system audio (set Zoom's speaker to "Same as System"); none = mic only. */
+    them_source: 'loopback' | 'none'
+    /** Noise suppression + auto gain on the mic. */
+    mic_processing: boolean
+    /** false = you're on speakers: mic lines that just repeat the other side are dropped. */
+    headphones: boolean
+  }
   screenshot: {
     /** Which monitor Ctrl+Alt+S captures: the one under the mouse, the primary, or a number. */
     display: 'cursor' | 'primary' | number
@@ -101,6 +118,17 @@ export const DEFAULT_CONFIG: CueConfig = {
       'gemini-embedding-001': { rpm: 100, rpd: 1000 }
     },
     prices: {}
+  },
+  audio: {
+    transcription: 'live',
+    chunked_fallback: true,
+    chunked_model: 'gemini-3.5-transcribe',
+    language: 'en-US',
+    vocabulary: ['Otsu', 'Dice', 'microCT', 'SCANCO', 'TD-309', 'Abaqus', 'DICOM', 'voxel', 'ROI', 'porosity', 'memmap'],
+    mic_device: 'default',
+    them_source: 'loopback',
+    mic_processing: true,
+    headphones: true
   },
   screenshot: { display: 'cursor', max_width: 1600 },
   knowledge: { live_context_tokens: 6000, instant_answers: true, instant_min_confidence: 0.6, embeddings: true },
@@ -194,6 +222,8 @@ export function loadConfig(root: string): { config: CueConfig; file: string } {
   config.sources.claude_code = expandPath(config.sources.claude_code ?? '')
   config.sources.codex = expandPath(config.sources.codex ?? '')
   config.keywords = asList(config.keywords)
+  config.audio.vocabulary = asList(config.audio.vocabulary)
+  if (config.audio.transcription !== 'chunked') config.audio.transcription = 'live'
   config.gemini.models.brain_fallbacks = asList(config.gemini.models.brain_fallbacks)
   config.gemini.models.fast_fallbacks = asList(config.gemini.models.fast_fallbacks)
   if (config.gemini.tier !== 'paid') config.gemini.tier = 'free'

@@ -12,6 +12,7 @@ const bridge: CueBridge = {
   onState: (cb) => on<UiState>('cue:state', cb),
   onAnswer: (cb) => on<AnswerEvent>('cue:answer', cb),
   onTranscript: (cb) => on<TranscriptLine[]>('cue:transcript', cb),
+  onLevels: (cb) => on<[number, number]>('cue:levels', ([me, them]) => cb(me, them)),
   ready: () => ipcRenderer.send('cue:ready'),
   ask: (text) => ipcRenderer.send('cue:ask', text),
   submitApiKey: (key) => ipcRenderer.send('cue:apikey', key),

@@ -12,11 +12,13 @@ export function App() {
   const [ui, setUi] = useState<UiState | null>(null)
   const [card, setCard] = useState<CardState | null>(null)
   const [lines, setLines] = useState<TranscriptLine[]>([])
+  const [levels, setLevels] = useState<[number, number]>([0, 0])
   const panel = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const offState = window.cue.onState(setUi)
     const offTranscript = window.cue.onTranscript(setLines)
+    const offLevels = window.cue.onLevels((me, them) => setLevels([me, them]))
     const offAnswer = window.cue.onAnswer((e: AnswerEvent) => {
       setCard((prev) => {
         switch (e.kind) {
@@ -42,6 +44,7 @@ export function App() {
     return () => {
       offState()
       offTranscript()
+      offLevels()
       offAnswer()
     }
   }, [])
@@ -63,7 +66,7 @@ export function App() {
       style={{ ['--fs' as string]: `${ui.fontSize}px` }}
     >
       {ui.selfTestPattern && <div className="selftest" />}
-      <Header ui={ui} />
+      <Header ui={ui} levels={levels} />
       {ui.hotkeyFailures.length > 0 && (
         <div className="banner error">Hotkeys not registered: {ui.hotkeyFailures.join(' · ')}</div>
       )}
