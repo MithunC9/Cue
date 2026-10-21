@@ -5,6 +5,7 @@ import type { AnswerEvent, InputMode, Notice, UiState } from '../shared/types'
 import { AnswerEngine } from './answers'
 import { AudioCapture } from './audio/capture'
 import { Listener } from './audio/listener'
+import { QuestionDetector } from './detector'
 import { ConfigError, DEFAULT_CONFIG, loadConfig, type CueConfig, type HotkeyAction } from './config'
 import { MeetingContext } from './context'
 import { Gemini } from './gemini/client'
@@ -45,6 +46,8 @@ let knowledge: LiveKnowledge
 let capture: AudioCapture
 let listener: Listener
 let settings: Settings
+let detector: QuestionDetector
+let themSpeaking = false
 
 function rendererUrl(page: string): { url?: string; file: string } {
   const dev = process.env.ELECTRON_RENDERER_URL
@@ -147,6 +150,27 @@ function setupAudio(): void {
   })
   listener.on('warn', (text) => notify('warn', text))
   capture.on('devices', () => buildTrayMenu())
+
+  detector = new QuestionDetector({
+    gem: () => gem,
+    cfg: () => config,
+    ctx,
+    ask: (question) => void engine.ask({ trigger: 'auto', question }),
+    themSpeaking: () => themSpeaking
+  })
+  capture.on('utteranceStart', (s) => {
+    if (s !== 'THEM') return
+    themSpeaking = true
+    detector.onThemSpeechStart()
+  })
+  capture.on('utteranceEnd', (s) => {
+    if (s !== 'THEM') return
+    themSpeaking = false
+    detector.onThemSpeechEnd()
+  })
+  listener.on('utterance', (speaker, text, at) => {
+    if (speaker === 'THEM') detector.onThemUtterance(text, at)
+  })
 }
 
 function toggleClickThrough(): void {
@@ -253,6 +277,15 @@ function buildTrayMenu(): void {
   tray.setMenu([
     { label: `${listening ? 'Pause listening' : 'Start listening'}\t${h.toggle_listening}`, click: toggleListening },
     { label: 'Microphone', submenu: micMenu() },
+    {
+      label: 'Auto-answer questions',
+      type: 'checkbox',
+      checked: detector?.enabled !== false && config.auto_answer.enabled,
+      click: (item) => {
+        detector.enabled = item.checked
+        notify('info', item.checked ? 'Auto-answer on: questions from the other side get a card.' : 'Auto-answer off: use Ctrl+Alt+Enter.')
+      }
+    },
     { type: 'separator' },
     { label: `Show / hide overlay\t${h.toggle_overlay}`, click: () => overlay.toggle() },
     { label: `Click-through\t${h.click_through}`, type: 'checkbox', checked: overlay.clickThrough, click: toggleClickThrough },

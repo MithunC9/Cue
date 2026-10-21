@@ -45,6 +45,14 @@ export interface CueConfig {
     /** Use embeddings (one tiny API call per question) in addition to local keyword search. */
     embeddings: boolean
   }
+  auto_answer: {
+    enabled: boolean
+    /** When to ask FAST "is this a question for me?": only for unclear lines (fast), always, or never. */
+    fast: 'ambiguous' | 'always' | 'never'
+    /** Wait this long after the other side stops before deciding, so follow-up sentences merge in. */
+    merge_ms: number
+    fast_timeout_ms: number
+  }
   audio: {
     /** live = Gemini Live API (fast); chunked = one request per utterance (slower, fallback). */
     transcription: 'live' | 'chunked'
@@ -119,6 +127,7 @@ export const DEFAULT_CONFIG: CueConfig = {
     },
     prices: {}
   },
+  auto_answer: { enabled: true, fast: 'ambiguous', merge_ms: 900, fast_timeout_ms: 6000 },
   audio: {
     transcription: 'live',
     chunked_fallback: true,
