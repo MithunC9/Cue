@@ -20,6 +20,11 @@ export interface StreamRequest {
   signal: AbortSignal
   /** How long to wait for a per-minute slot before trying the next model. */
   maxWaitMs: number
+  /** Prep: wait out a short per-minute 429 on the same model instead of falling back. */
+  retrySameMs?: number
+  onSkip?: (message: string) => void
+  /** Paid tier: an explicit cache holding the system prompt + knowledge, valid for one model. */
+  cache?: { model: string; name: string; contents: Content[] }
   onText?: (fullText: string) => void
 }
 
@@ -35,14 +40,20 @@ export interface StreamResult {
 /** Models that rejected thinkingLevel once; we stop sending it to them. */
 const noThinking = new Set<string>()
 
-async function open(gem: Gemini, model: string, req: StreamRequest) {
+function requestFor(model: string, req: Pick<StreamRequest, 'system' | 'contents' | 'thinking' | 'signal' | 'cache'>) {
+  const cached = req.cache && req.cache.model === model
   const config = {
-    systemInstruction: req.system,
+    // With an explicit cache the system prompt lives in the cache.
+    ...(cached ? { cachedContent: req.cache!.name } : { systemInstruction: req.system }),
     abortSignal: req.signal,
     ...(noThinking.has(model) ? {} : { thinkingConfig: { thinkingLevel: LEVELS[req.thinking] } })
   }
+  return { model, contents: cached ? req.cache!.contents : req.contents, config }
+}
+
+async function open(gem: Gemini, model: string, req: StreamRequest) {
   try {
-    const stream = await gem.ai.models.generateContentStream({ model, contents: req.contents, config })
+    const stream = await gem.ai.models.generateContentStream(requestFor(model, req))
     const it = stream[Symbol.asyncIterator]()
     // Pull the first chunk here so quota/overload errors surface inside withFallback.
     const first = await it.next()
@@ -61,7 +72,9 @@ export async function streamBrain(gem: Gemini, req: StreamRequest): Promise<Stre
   const t0 = performance.now()
   const { model, value } = await withFallback(gem.quota, req.chain, (m) => open(gem, m, req), {
     maxWaitMs: req.maxWaitMs,
-    signal: req.signal
+    signal: req.signal,
+    retrySameMs: req.retrySameMs,
+    onSkip: req.onSkip
   })
   let firstTokenMs = -1
   let text = ''
@@ -92,4 +105,48 @@ export async function streamBrain(gem: Gemini, req: StreamRequest): Promise<Stre
     inputTokens,
     outputTokens
   }
+}
+
+export interface JsonRequest {
+  system: string
+  contents: Content[]
+  /** JSON Schema for the response. */
+  schema: Record<string, unknown>
+  thinking: ThinkingLevel
+  chain: string[]
+  signal?: AbortSignal
+  maxWaitMs: number
+  retrySameMs?: number
+  onSkip?: (message: string) => void
+}
+
+/** Non-streamed call that returns parsed JSON matching `schema` (structured output). */
+export async function generateJson<T>(gem: Gemini, req: JsonRequest): Promise<{ model: string; value: T; inputTokens: number; outputTokens: number }> {
+  const signal = req.signal ?? new AbortController().signal
+  const call = async (model: string) => {
+    const base = requestFor(model, { ...req, signal })
+    const config = { ...base.config, responseMimeType: 'application/json', responseJsonSchema: req.schema }
+    try {
+      return await gem.ai.models.generateContent({ model, contents: req.contents, config })
+    } catch (err) {
+      const e = parseApiError(err)
+      if (e.status === 400 && /thinking/i.test(e.message) && !noThinking.has(model)) {
+        noThinking.add(model)
+        return gem.ai.models.generateContent({ model, contents: req.contents, config: { ...config, thinkingConfig: undefined } })
+      }
+      throw err
+    }
+  }
+  const { model, value: res } = await withFallback(gem.quota, req.chain, call, {
+    maxWaitMs: req.maxWaitMs,
+    signal,
+    retrySameMs: req.retrySameMs,
+    onSkip: req.onSkip
+  })
+  const text = (res.text ?? '').trim().replace(/^```(?:json)?\s*|\s*```$/g, '')
+  const u = res.usageMetadata
+  const inputTokens = u?.promptTokenCount ?? 0
+  const outputTokens = (u?.candidatesTokenCount ?? 0) + (u?.thoughtsTokenCount ?? 0)
+  gem.addUsage(model, inputTokens, outputTokens)
+  return { model, value: JSON.parse(text) as T, inputTokens, outputTokens }
 }

@@ -2,7 +2,7 @@
 import { app, globalShortcut, ipcMain, shell } from 'electron'
 import path from 'node:path'
 import type { AnswerEvent, InputMode, Notice, UiState } from '../shared/types'
-import { AnswerEngine, type KnowledgeProvider } from './answers'
+import { AnswerEngine } from './answers'
 import { ConfigError, DEFAULT_CONFIG, loadConfig, type CueConfig, type HotkeyAction } from './config'
 import { MeetingContext } from './context'
 import { Gemini } from './gemini/client'
@@ -12,6 +12,7 @@ import { Overlay, windowsBuild } from './overlay'
 import { resolvePaths, type CuePaths } from './paths'
 import { loadApiKey, saveEncryptedKey } from './secrets'
 import { runCaptureSelfTest } from './selftest'
+import { LiveKnowledge } from './liveKnowledge'
 import { CueTray } from './tray'
 
 if (!app.requestSingleInstanceLock()) {
@@ -35,8 +36,7 @@ let selfTestPattern = false
 const notices: Notice[] = []
 let noticeSeq = 0
 
-// Phase 2 replaces this with the prep corpus (brief.md + retrieved chunks).
-const knowledge: KnowledgeProvider = { forQuestion: async () => null }
+let knowledge: LiveKnowledge
 
 function notify(level: Notice['level'], text: string): void {
   notices.push({ id: ++noticeSeq, level, text })
@@ -57,7 +57,8 @@ function uiState(): UiState {
     sessionTokens: gem ? { ...gem.tokens } : { input: 0, output: 0 },
     sessionCostUsd: config.gemini.tier === 'paid' && gem ? gem.costUsd : null,
     lastLatencyMs: engine?.lastLatencyMs ?? null,
-    knowledgeLoaded: false, // Phase 2
+    knowledgeLoaded: Boolean(knowledge?.kb && !knowledge.kb.empty),
+    knowledgeInfo: knowledge?.info() ?? '',
     notices: [...notices],
     fontSize: config.ui.font_size,
     material: overlay?.material ?? 'translucent',
@@ -82,6 +83,7 @@ function setupGemini(): void {
     return
   }
   gem = new Gemini(k.key, config, path.join(paths.userData, 'quota.json'))
+  void knowledge?.refreshCache()
   if (k.savedEncryptedNow) notify('info', 'API key saved encrypted with Windows DPAPI. You can now delete it from .env.')
 }
 
@@ -159,6 +161,15 @@ function buildTrayMenu(): void {
     { label: 'Test screen-share hiding', click: () => void selfTest() },
     { label: 'Set API key…', click: () => setInputMode('apikey') },
     { label: 'Open config.yaml', click: () => void shell.openPath(paths.config) },
+    { label: 'Open brief.md', enabled: Boolean(knowledge.kb?.brief), click: () => void shell.openPath(path.join(paths.knowledge, 'brief.md')) },
+    { label: 'Open knowledge folder', click: () => void shell.openPath(paths.knowledge) },
+    {
+      label: 'Reload knowledge',
+      click: () => {
+        knowledge.load()
+        notify('info', knowledge.kb ? `Notes reloaded: ${knowledge.info()}` : 'No knowledge folder yet. Run npm run prep.')
+      }
+    },
     { label: 'Reload config.yaml', click: applyConfigAndMenu },
     { label: 'Open sessions folder', click: () => void shell.openPath(paths.sessions) },
     { label: 'Open log folder', click: () => void shell.openPath(paths.logs) },
@@ -225,12 +236,19 @@ app.whenReady().then(() => {
     inputMode = 'none'
     pushState()
   })
+  knowledge = new LiveKnowledge(paths.knowledge, () => gem, () => config, ctx, () => {
+    pushState()
+    if (tray) buildTrayMenu()
+  })
   engine = new AnswerEngine(() => gem, () => config, ctx, knowledge, emitAnswer, pushState)
 
   tray = new CueTray('Cue: meeting copilot')
   tray.onClick(() => overlay.toggle())
   wireIpc()
   setupGemini()
+  knowledge.load()
+  knowledge.watch()
+  if (!knowledge.kb) notices.push({ id: ++noticeSeq, level: 'warn', text: 'No notes loaded yet. Fill in sources in config.yaml, then run: npm run prep' })
   hotkeyFailures = registerHotkeys(config.hotkeys, hotkeyHandlers())
   buildTrayMenu()
 

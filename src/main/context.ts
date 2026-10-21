@@ -36,6 +36,13 @@ export class MeetingContext {
     return this.lines.filter((l) => now - l.at <= ms)
   }
 
+  /** What "answer now" should answer: the other side's last few lines, else anything recent. */
+  lastQuestionText(ms: number, now = Date.now()): string {
+    const recent = this.since(ms, now).filter((l) => l.text.trim())
+    const them = recent.filter((l) => l.speaker === 'THEM').slice(-3)
+    return (them.length ? them : recent.slice(-3)).map((l) => l.text.trim()).join(' ')
+  }
+
   transcriptText(ms: number): string {
     return this.since(ms)
       .filter((l) => l.text.trim())

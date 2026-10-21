@@ -260,6 +260,27 @@ body {
   word-break: break-all;
 }
 
+.card .prep-tag {
+  font-size: 0.62em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ok);
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card .prep-tag .dim {
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+
+.card.prepared {
+  box-shadow: inset 3px 0 0 var(--ok);
+}
+
 .card .thinking {
   color: var(--muted);
   font-style: italic;

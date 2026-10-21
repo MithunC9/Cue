@@ -24,6 +24,8 @@ export function App() {
             return null
           case 'start':
             return { id: e.id, trigger: e.trigger, question: e.question, text: '', status: 'streaming' }
+          case 'prepared':
+            return prev && prev.id === e.id ? { ...prev, prepared: { text: e.text, matched: e.matched, confidence: e.confidence, source: e.source } } : prev
           case 'delta':
             return prev && prev.id === e.id ? { ...prev, text: e.text } : prev
           case 'done':

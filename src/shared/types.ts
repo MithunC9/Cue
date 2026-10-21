@@ -39,8 +39,17 @@ export interface AnswerError {
   message: string
 }
 
+export interface AnswerPrepared {
+  id: number
+  text: string // card text from qa_bank, shown instantly while the live answer streams
+  matched: string // the prepared question it matched
+  confidence: number
+  source: 'qa' | 'notes' // prepared Q&A answer, or the most relevant lines from your notes
+}
+
 export type AnswerEvent =
   | ({ kind: 'start' } & AnswerStart)
+  | ({ kind: 'prepared' } & AnswerPrepared)
   | ({ kind: 'delta' } & AnswerDelta)
   | ({ kind: 'done' } & AnswerDone)
   | ({ kind: 'error' } & AnswerError)
@@ -74,6 +83,7 @@ export interface UiState {
   sessionCostUsd: number | null
   lastLatencyMs: number | null
   knowledgeLoaded: boolean
+  knowledgeInfo: string
   notices: Notice[]
   fontSize: number
   material: 'acrylic' | 'mica' | 'translucent'

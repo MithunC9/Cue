@@ -10,6 +10,7 @@ export interface CardState {
   error?: string
   model?: string
   firstTokenMs?: number
+  prepared?: { text: string; matched: string; confidence: number; source: 'qa' | 'notes' }
 }
 
 /** Renders **bold** spans without touching innerHTML. */
@@ -20,7 +21,8 @@ function inline(text: string): ReactNode[] {
 }
 
 function Line({ line, first }: { line: string; first: boolean }) {
-  const t = line.trim()
+  // Citations belong on the sources line; drop any the model put inline.
+  const t = /^\[sources?:/i.test(line.trim()) ? line.trim() : line.replace(/\s*\[src:[^\]]*\]/g, '').trim()
   if (!t) return null
   if (/^\[sources?:/i.test(t)) return <div className="sources">{t.replace(/^\[|\]$/g, '')}</div>
   if (t.startsWith('↳')) return <div className="deeper">{inline(t)}</div>
@@ -33,20 +35,25 @@ const TRIGGER: Record<AnswerTrigger, string> = { typed: 'typed', hotkey: 'answer
 
 export function AnswerCard({ card }: { card: CardState | null }) {
   if (!card) return <div className="card idle">Ctrl+Alt+T to type a question · Ctrl+Alt+Enter to answer now</div>
-  const lines = card.text.split('\n').filter((l) => l.trim())
-  const notInNotes = /not in your notes/i.test(lines[0] ?? '')
+  // Live text wins as soon as it starts streaming; until then (or if it fails) show the prepared answer.
+  const showPrepared = !card.text && card.prepared
+  const body = card.text || card.prepared?.text || ''
+  const lines = body.split('\n').filter((l) => l.trim())
+  const notInNotes = /not in (?:your|my) notes/i.test(lines[0] ?? '')
   return (
-    <div className={`card ${card.status} ${notInNotes ? 'unverified' : ''}`}>
+    <div className={`card ${card.status} ${notInNotes ? 'unverified' : ''} ${showPrepared ? 'prepared' : ''}`}>
       <div className="q">
         <span className="trig">{TRIGGER[card.trigger]}</span> {card.question}
       </div>
-      {card.status === 'error' ? (
-        <div className="err">{card.error}</div>
-      ) : card.text ? (
-        lines.map((l, i) => <Line key={i} line={l} first={i === 0} />)
-      ) : (
-        <div className="thinking">thinking…</div>
+      {showPrepared && (
+        <div className="prep-tag">
+          {card.prepared!.source === 'qa' ? 'PREPARED' : 'FROM YOUR NOTES'}
+          {card.status === 'streaming' ? ' · live answer coming…' : ''}{' '}
+          {card.prepared!.source === 'qa' && <span className="dim">matched “{card.prepared!.matched}”</span>}
+        </div>
       )}
+      {body ? lines.map((l, i) => <Line key={i} line={l} first={i === 0} />) : card.status !== 'error' && <div className="thinking">thinking…</div>}
+      {card.status === 'error' && <div className="err">{card.error}</div>}
     </div>
   )
 }

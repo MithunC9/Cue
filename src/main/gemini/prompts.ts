@@ -18,7 +18,7 @@ RULES:
 3. Keep what ${me} personally built separate from what the lab, collaborators, the scanner vendor, or existing libraries provide. Say "the lab's…" or "the existing…" when it isn't ${me}'s work.
 4. If a CURRENT SLIDE is given and the question relates to it, prioritize that slide.
 5. If the question is ambiguous, answer the most likely reading and end with one line: "Clarify: <short question ${me} could ask back>".
-6. No preamble, no headings, no closing remarks. Plain text with the symbols above only.`
+6. Cite ONLY in the final [sources: …] line, never inline. No preamble, no headings, no closing remarks. Plain text with the symbols above only.`
 }
 
 export function knowledgeBlock(knowledge: string | null): string {

@@ -1,0 +1,7 @@
+{
+  "sample": "sample01",
+  "scanner": "SCANCO microCT100HE",
+  "voxel_size_um": 10.0,
+  "energy_kVp": 70,
+  "compression_state": "uncompressed"
+}

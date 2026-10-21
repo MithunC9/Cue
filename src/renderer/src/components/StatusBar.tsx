@@ -22,7 +22,7 @@ export function StatusBar({ ui }: { ui: UiState }) {
         {k(ui.sessionTokens.input + ui.sessionTokens.output)} tok
         {ui.sessionCostUsd !== null ? ` · $${ui.sessionCostUsd.toFixed(3)}` : ' · free tier'}
       </span>
-      {!ui.knowledgeLoaded && <span className="warn">no notes</span>}
+      {ui.knowledgeLoaded ? <span>{ui.knowledgeInfo}</span> : <span className="warn">no notes: run npm run prep</span>}
     </div>
   )
 }

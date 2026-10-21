@@ -16,10 +16,13 @@
     "build:app": "electron-vite build",
     "build": "electron-vite build && electron-builder --win --config electron-builder.yml",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "test": "tsx --test test/*.test.ts"
+    "test": "tsx --test test/*.test.ts",
+    "prep": "tsx src/prep/index.ts"
   },
   "dependencies": {
     "@google/genai": "2.30.0",
+    "jszip": "3.10.1",
+    "unpdf": "1.8.1",
     "yaml": "2.9.1"
   },
   "optionalDependencies": {

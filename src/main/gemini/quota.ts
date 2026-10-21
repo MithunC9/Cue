@@ -177,6 +177,13 @@ export interface FallbackOptions {
   /** Wait up to this long for a per-minute slot before moving on to the next model. */
   maxWaitMs: number
   signal?: AbortSignal
+  /**
+   * Prep only: when Google says "per-minute limit, retry in N s" and N is below this, wait and retry
+   * the same model instead of dropping to a weaker fallback.
+   */
+  retrySameMs?: number
+  /** Told about every model that was skipped, and why. */
+  onSkip?: (message: string) => void
 }
 
 const sleep = (ms: number, signal?: AbortSignal) =>
@@ -193,8 +200,9 @@ const sleep = (ms: number, signal?: AbortSignal) =>
   })
 
 /**
- * Runs `fn` with the first model in `chain` that has budget. On 429 (quota) or 503 (overloaded)
- * the model is blocked for the period Google asks for and the next model is tried.
+ * Runs `fn` with the first model in `chain` that has budget. On 429 (quota) or 5xx (overloaded) the
+ * model is blocked for the period Google asks for and the next model is tried. Network drops and
+ * streams cut off before their first token also move on to the next model.
  */
 export async function withFallback<T>(
   quota: QuotaManager,
@@ -211,27 +219,37 @@ export async function withFallback<T>(
     }
     if (!c.ok) {
       skipped.push(`${model}: ${c.reason}`)
+      opts.onSkip?.(skipped[skipped.length - 1])
       continue
     }
-    quota.record(model)
-    try {
-      return { model, value: await fn(model) }
-    } catch (err) {
-      if (opts.signal?.aborted) throw err
-      const e = parseApiError(err)
-      const now = Date.now()
-      if (e.status === 429 || e.status === 500 || e.status === 503 || e.status === 504) {
-        const until = e.status === 429 && e.daily ? nextPacificMidnight(now) : now + (e.retryAfterMs ?? (e.status === 429 ? 60_000 : 15_000))
-        quota.block(model, until)
-        skipped.push(`${model}: ${e.status === 429 ? 'quota' : 'overloaded'} (HTTP ${e.status})`)
-        continue
+    let retried = false
+    attempt: for (;;) {
+      quota.record(model)
+      try {
+        return { model, value: await fn(model) }
+      } catch (err) {
+        if (opts.signal?.aborted) throw err
+        const e = parseApiError(err)
+        const now = Date.now()
+        if (e.status === 429 && !e.daily && !retried && opts.retrySameMs && (e.retryAfterMs ?? 30_000) <= opts.retrySameMs) {
+          retried = true
+          await sleep((e.retryAfterMs ?? 30_000) + 500, opts.signal)
+          continue attempt
+        }
+        if (e.status === 429 || e.status === 500 || e.status === 503 || e.status === 504) {
+          const until = e.status === 429 && e.daily ? nextPacificMidnight(now) : now + (e.retryAfterMs ?? (e.status === 429 ? 60_000 : 15_000))
+          quota.block(model, until)
+          skipped.push(`${model}: ${e.status === 429 ? 'quota' : 'overloaded'} (HTTP ${e.status})`)
+          opts.onSkip?.(skipped[skipped.length - 1])
+          break attempt
+        }
+        if (e.status === null) {
+          skipped.push(`${model}: ${e.message.slice(0, 80)}`)
+          opts.onSkip?.(skipped[skipped.length - 1])
+          break attempt
+        }
+        throw err
       }
-      if (e.status === null) {
-        // Network drop or a stream cut off before its first token: try the next model.
-        skipped.push(`${model}: ${e.message.slice(0, 80)}`)
-        continue
-      }
-      throw err
     }
   }
   throw new AllModelsExhaustedError(skipped)

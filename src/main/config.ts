@@ -36,6 +36,15 @@ export interface CueConfig {
     quotas: Record<string, ModelQuota>
     prices: Record<string, { input: number; output: number }>
   }
+  knowledge: {
+    /** Tokens of notes sent with each live question (brief + best chunks). Smaller = faster. */
+    live_context_tokens: number
+    /** Show the prepared qa_bank answer instantly when a question matches it. */
+    instant_answers: boolean
+    instant_min_confidence: number
+    /** Use embeddings (one tiny API call per question) in addition to local keyword search. */
+    embeddings: boolean
+  }
   ui: {
     width: number
     position: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'
@@ -77,9 +86,18 @@ export const DEFAULT_CONFIG: CueConfig = {
       embed: 'gemini-embedding-001'
     },
     thinking: { live: 'low', prep: 'high', fast: 'minimal' },
-    quotas: {},
+    quotas: {
+      'gemini-3.6-flash': { rpm: 5, rpd: 20 },
+      'gemini-3.8-flash': { rpm: 5, rpd: 20 },
+      'gemini-3.7-flash': { rpm: 5, rpd: 20 },
+      'gemini-3.5-flash': { rpm: 5, rpd: 20 },
+      'gemini-3.5-flash-lite': { rpm: 15, rpd: 500 },
+      'gemini-3.1-flash-lite': { rpm: 15, rpd: 500 },
+      'gemini-embedding-001': { rpm: 100, rpd: 1000 }
+    },
     prices: {}
   },
+  knowledge: { live_context_tokens: 6000, instant_answers: true, instant_min_confidence: 0.6, embeddings: true },
   ui: {
     width: 420,
     position: 'top-right',
