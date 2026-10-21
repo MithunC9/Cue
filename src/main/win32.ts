@@ -9,6 +9,8 @@ let api: {
   SetForegroundWindow: Fn
   GetWindowDisplayAffinity: Fn
   IsWindow: Fn
+  FindWindowW: Fn
+  IsWindowVisible: Fn
 } | null = null
 
 if (process.platform === 'win32') {
@@ -20,7 +22,9 @@ if (process.platform === 'win32') {
       GetForegroundWindow: user32.func('intptr_t __stdcall GetForegroundWindow()'),
       SetForegroundWindow: user32.func('bool __stdcall SetForegroundWindow(intptr_t hWnd)'),
       GetWindowDisplayAffinity: user32.func('bool __stdcall GetWindowDisplayAffinity(intptr_t hWnd, _Out_ uint32_t *pdwAffinity)'),
-      IsWindow: user32.func('bool __stdcall IsWindow(intptr_t hWnd)')
+      IsWindow: user32.func('bool __stdcall IsWindow(intptr_t hWnd)'),
+      FindWindowW: user32.func('intptr_t __stdcall FindWindowW(const char16_t *lpClassName, const char16_t *lpWindowName)'),
+      IsWindowVisible: user32.func('bool __stdcall IsWindowVisible(intptr_t hWnd)')
     }
   } catch (err) {
     log.warn('koffi unavailable; focus restore and affinity check disabled', err)
@@ -61,6 +65,22 @@ export function displayAffinity(hwnd: bigint): number | null {
   const out = [0]
   try {
     return api.GetWindowDisplayAffinity(Number(hwnd), out) ? out[0] : null
+  } catch {
+    return null
+  }
+}
+
+/** Window classes of Zoom's in-meeting windows (stable across Zoom versions for years). */
+const ZOOM_MEETING_CLASSES = ['ZPContentViewWndClass', 'ConfMultiTabContentWndClass']
+
+/** True when a Zoom meeting window is open (Windows only; null when it can't tell). */
+export function zoomMeetingOpen(): boolean | null {
+  if (!api) return null
+  try {
+    return ZOOM_MEETING_CLASSES.some((cls) => {
+      const h = api!.FindWindowW(cls, null) as number | bigint
+      return Boolean(h) && Boolean(api!.IsWindowVisible(h))
+    })
   } catch {
     return null
   }

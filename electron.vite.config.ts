@@ -6,7 +6,7 @@ export default defineConfig({
   main: {
     build: {
       externalizeDeps: { include: ['koffi'] },
-      rollupOptions: { input: { index: resolve(__dirname, 'src/main/index.ts') } }
+      rollupOptions: { input: { index: resolve(__dirname, 'src/main/index.ts'), prep: resolve(__dirname, 'src/prep/index.ts') } }
     },
     resolve: { alias: { '@shared': resolve(__dirname, 'src/shared') } }
   },

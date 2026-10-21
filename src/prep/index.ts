@@ -21,7 +21,13 @@ const args = process.argv.slice(2)
 const flag = (name: string) => args.includes(`--${name}`)
 const only = args.find((a) => a.startsWith('--only='))?.slice(7).split(',') ?? null
 const want = (step: string) => !only || only.includes(step)
-const say = (s: string) => console.log(redact(s))
+/** When run from the app (Electron utility process) progress also goes over the message port. */
+const port = (process as unknown as { parentPort?: { postMessage: (m: unknown) => void } }).parentPort
+const say = (s: string) => {
+  const line = redact(s)
+  console.log(line)
+  port?.postMessage({ line })
+}
 
 async function main(): Promise<void> {
   const root = process.env.CUE_HOME ? path.resolve(process.env.CUE_HOME) : process.cwd()
@@ -168,11 +174,17 @@ function writeCorpusFiles(out: string, chunks: { kind: string; source: string; t
   for (const [kind, parts] of byKind) writeFileSync(path.join(dir, `${kind}.md`), parts.join('\n\n') + '\n')
 }
 
-main().catch((err) => {
-  if (err instanceof ConfigError) console.error(err.message)
-  else if (err instanceof AllModelsExhaustedError) console.error(`Out of free-tier budget: ${err.details.join('; ')}\nRun prep again after the limits reset (midnight Pacific for daily limits).`)
-  else console.error(redact(`Prep failed: ${parseApiError(err).message}`))
-  process.exitCode = 1
-})
+main()
+  .catch((err) => {
+    if (err instanceof ConfigError) say(`⚠ ${err.message}`)
+    else if (err instanceof AllModelsExhaustedError) say(`⚠ Out of free-tier budget: ${err.details.join('; ')}. Run prep again after the limits reset (midnight Pacific for daily limits).`)
+    else say(`⚠ Prep failed: ${parseApiError(err).message}`)
+    process.exitCode = 1
+  })
+  // pdf.js can leave handles open; don't hang around once the work is done.
+  .finally(() => {
+    // pdf.js can leave handles open inside the app's utility process; exit once the work is done.
+    if (port) setTimeout(() => process.exit(typeof process.exitCode === 'number' ? process.exitCode : 0), 300)
+  })
 
 export type { Manifest }

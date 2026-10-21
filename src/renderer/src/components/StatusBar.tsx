@@ -15,6 +15,8 @@ export function StatusBar({ ui }: { ui: UiState }) {
   return (
     <div className="status">
       <span className={`dot ${ui.listening ? 'on' : ''}`}>●</span>
+      {ui.listening && (ui.ears.ME === 'error' || ui.ears.THEM === 'error') && <span className="warn">transcription retrying</span>}
+      {ui.prepRunning && <span className="warn">prep running…</span>}
       <span>{ui.lastLatencyMs !== null ? `${(ui.lastLatencyMs / 1000).toFixed(1)}s` : '–'}</span>
       {ui.quota.brain.length > 0 && <span>brain {quotaText(ui.quota.brain)}</span>}
       {ui.quota.fast.length > 0 && <span>fast {quotaText(ui.quota.fast)}</span>}

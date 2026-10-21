@@ -1,5 +1,5 @@
 // Cue main process: app lifecycle, overlay, global hotkeys, tray, IPC.
-import { app, globalShortcut, ipcMain, shell } from 'electron'
+import { app, globalShortcut, ipcMain, shell, utilityProcess } from 'electron'
 import path from 'node:path'
 import type { AnswerEvent, InputMode, Notice, UiState } from '../shared/types'
 import { AnswerEngine } from './answers'
@@ -19,7 +19,7 @@ import { resolvePaths, type CuePaths } from './paths'
 import { loadApiKey, saveEncryptedKey } from './secrets'
 import { screenshotJpeg } from './screen'
 import { runCaptureSelfTest } from './selftest'
-import { WDA_EXCLUDEFROMCAPTURE } from './win32'
+import { WDA_EXCLUDEFROMCAPTURE, zoomMeetingOpen } from './win32'
 import { LiveKnowledge } from './liveKnowledge'
 import { Settings } from './settings'
 import { CueTray } from './tray'
@@ -53,6 +53,7 @@ let detector: QuestionDetector
 let tracker: SlideTracker
 let sessionLog: SessionLog
 let debriefing = false
+let prepRunning = false
 let themSpeaking = false
 
 function rendererUrl(page: string): { url?: string; file: string } {
@@ -74,6 +75,8 @@ function uiState(): UiState {
     slide: presentation && tracker?.current ? { ...tracker.current } : null,
     listening,
     listeningAvailable: true,
+    ears: listener ? { ...listener.earsState } : { ME: 'idle', THEM: 'idle' },
+    prepRunning,
     hotkeyFailures,
     quota: gem?.usage() ?? { brain: [], fast: [] },
     tier: config.gemini.tier,
@@ -134,6 +137,21 @@ function togglePresentation(): void {
   pushState()
 }
 
+/** Nice-to-have: when a Zoom meeting window appears and Cue isn't listening, offer to start. */
+function watchZoom(): void {
+  if (process.platform !== 'win32') return
+  let wasOpen = false
+  setInterval(() => {
+    const open = zoomMeetingOpen()
+    if (open === null) return
+    if (open && !wasOpen && !listening) {
+      notify('warn', `Zoom meeting detected. Press ${config.hotkeys.toggle_listening} to start listening.`)
+      overlay.show()
+    }
+    wasOpen = open
+  }, 5000)
+}
+
 function setupPresentation(): void {
   tracker = new SlideTracker(() => config, () => knowledge.kb, () => gem)
   tracker.on('slide', (s) => {
@@ -179,6 +197,7 @@ function setupAudio(): void {
     log.info(on ? 'listening started' : 'listening stopped')
   })
   listener.on('warn', (text) => notify('warn', text))
+  listener.on('ears', () => pushState())
   capture.on('devices', () => buildTrayMenu())
 
   detector = new QuestionDetector({
@@ -242,6 +261,37 @@ async function screenshotAnswer(): Promise<void> {
 
 /** Saves screenshots into the session folder when sessions.save_screenshots is on. */
 const onScreenshot = (jpeg: Buffer) => sessionLog?.screenshot(jpeg)
+
+/** Runs `npm run prep` inside the app (a separate utility process), so the installed .exe needs no Node. */
+function runPrep(force: boolean): void {
+  if (prepRunning) return
+  prepRunning = true
+  buildTrayMenu()
+  notify('info', 'Prep started: reading your sources, then writing brief / Q&A / gaps (several minutes on the free tier).')
+  const child = utilityProcess.fork(path.join(__dirname, 'prep.js'), force ? ['--force'] : [], {
+    stdio: 'pipe',
+    serviceName: 'Cue prep',
+    env: { ...process.env, CUE_HOME: paths.home, CUE_USER_DATA: paths.userData }
+  })
+  let last = ''
+  const onLine = (line: string) => {
+    const t = line.trim()
+    if (!t) return
+    last = t
+    if (/^▸/.test(t)) notify('info', t.replace(/^▸\s*/, 'Prep: '))
+    else if (/^\s*⚠/.test(t)) notify('warn', `Prep: ${t.replace(/^\s*⚠\s*/, '')}`)
+  }
+  child.stdout?.on('data', (d: Buffer) => log.info(`prep: ${d.toString().trim()}`))
+  child.stderr?.on('data', (d: Buffer) => log.warn(`prep: ${d.toString().trim()}`))
+  child.on('message', (m: { line?: string }) => m?.line && onLine(m.line))
+  child.on('exit', (code) => {
+    prepRunning = false
+    knowledge.load()
+    buildTrayMenu()
+    if (code === 0) notify('info', `Prep finished: ${knowledge.info()}. Read knowledge\\brief.md, qa_bank.md, gaps.md.`)
+    else notify('error', `Prep stopped: ${last || `exit code ${code}`}. Details in the log.`)
+  })
+}
 
 async function debrief(): Promise<void> {
   if (debriefing) return
@@ -353,6 +403,8 @@ function buildTrayMenu(): void {
       }
     },
     { label: 'Reload config.yaml', click: applyConfigAndMenu },
+    { label: prepRunning ? 'Prep running…' : 'Prepare knowledge (prep)', enabled: !prepRunning, click: () => runPrep(false) },
+    { label: 'Re-run prep from scratch', enabled: !prepRunning, click: () => runPrep(true) },
     { label: 'Debrief this meeting', enabled: !debriefing, click: () => void debrief() },
     { label: 'Open sessions folder', click: () => void shell.openPath(sessionLog?.dir ?? paths.sessions) },
     { label: 'Open log folder', click: () => void shell.openPath(paths.logs) },
@@ -438,6 +490,7 @@ app.whenReady().then(() => {
   if (!knowledge.kb) notices.push({ id: ++noticeSeq, level: 'warn', text: 'No notes loaded yet. Fill in sources in config.yaml, then run: npm run prep' })
   hotkeyFailures = registerHotkeys(config.hotkeys, hotkeyHandlers())
   buildTrayMenu()
+  watchZoom()
 
   if (process.platform === 'win32' && build < 19041) {
     notify('warn', `Windows build ${build}: screen-share hiding needs Windows 10 2004 (19041)+. Older builds show a black box instead.`)

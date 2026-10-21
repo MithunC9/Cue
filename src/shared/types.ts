@@ -88,6 +88,9 @@ export interface UiState {
   slide: SlideView | null
   listening: boolean
   listeningAvailable: boolean
+  /** Transcription connection health per stream while listening. */
+  ears: { ME: 'idle' | 'connecting' | 'open' | 'error'; THEM: 'idle' | 'connecting' | 'open' | 'error' }
+  prepRunning: boolean
   hotkeyFailures: string[]
   quota: { brain: QuotaUsage[]; fast: QuotaUsage[] }
   tier: 'free' | 'paid'

@@ -16,6 +16,7 @@ export interface ListenerEvents {
   state: [listening: boolean, detail: string]
   levels: [me: number, them: number]
   warn: [text: string]
+  ears: [state: Record<Speaker, EarsState>]
 }
 
 export class Listener extends EventEmitter<ListenerEvents> {
@@ -41,6 +42,7 @@ export class Listener extends EventEmitter<ListenerEvents> {
       ears.on('final', (text) => this.line(ears.speaker, text, true))
       ears.on('state', (state, detail) => {
         this.earsState[ears.speaker] = state
+        this.emit('ears', { ...this.earsState })
         if (state === 'error' && detail) this.emit('warn', `${ears.speaker === 'ME' ? 'Mic' : 'Zoom audio'} transcription: ${detail}`)
       })
     }
