@@ -6,7 +6,9 @@ import { AnswerEngine } from './answers'
 import { AudioCapture } from './audio/capture'
 import { Listener } from './audio/listener'
 import { QuestionDetector } from './detector'
+import { writeDebrief } from './debrief'
 import { SlideTracker } from './presentation'
+import { SessionLog, latestSession } from './session'
 import { ConfigError, DEFAULT_CONFIG, loadConfig, type CueConfig, type HotkeyAction } from './config'
 import { MeetingContext } from './context'
 import { Gemini } from './gemini/client'
@@ -49,6 +51,8 @@ let listener: Listener
 let settings: Settings
 let detector: QuestionDetector
 let tracker: SlideTracker
+let sessionLog: SessionLog
+let debriefing = false
 let themSpeaking = false
 
 function rendererUrl(page: string): { url?: string; file: string } {
@@ -136,6 +140,7 @@ function setupPresentation(): void {
     const slide = knowledge.kb?.slides.find((x) => x.index === s.index)
     ctx.currentSlide = slide ? { index: slide.index, title: slide.title, text: slide.text, notes: slide.notes } : null
     log.info(`slide ${s.index}/${s.total} (${s.method}, ${s.confidence.toFixed(2)}): ${s.title}`)
+    sessionLog.slide(s.index, s.title)
     pushState()
   })
 }
@@ -194,6 +199,7 @@ function setupAudio(): void {
     detector.onThemSpeechEnd()
   })
   listener.on('utterance', (speaker, text, at) => {
+    sessionLog.transcript({ id: 0, speaker, text, final: true, at })
     if (speaker === 'THEM') detector.onThemUtterance(text, at)
   })
 }
@@ -224,7 +230,7 @@ async function screenshotAnswer(): Promise<void> {
     const shot = await screenshotJpeg(config.screenshot.display, config.screenshot.max_width)
     if (hide) overlay.show()
     log.info(`screenshot ${shot.width}x${shot.height}, ${Math.round(shot.data.length / 1024)} KB`)
-    onScreenshot?.(shot.data)
+    onScreenshot(shot.data)
     void engine.ask({ trigger: 'screenshot', image: { data: shot.data, mimeType: shot.mimeType } })
   } catch (err) {
     if (hide) overlay.show()
@@ -234,8 +240,26 @@ async function screenshotAnswer(): Promise<void> {
   }
 }
 
-/** Phase 7 hooks this to save screenshots into the session folder when enabled. */
-let onScreenshot: ((jpeg: Buffer) => void) | null = null
+/** Saves screenshots into the session folder when sessions.save_screenshots is on. */
+const onScreenshot = (jpeg: Buffer) => sessionLog?.screenshot(jpeg)
+
+async function debrief(): Promise<void> {
+  if (debriefing) return
+  if (!gem) return notify('warn', 'Set a Gemini API key first.')
+  const dir = sessionLog.dir ?? latestSession(paths.sessions)
+  if (!dir) return notify('warn', 'Nothing to debrief yet: no session transcript.')
+  debriefing = true
+  notify('info', 'Writing the debrief (one high-thinking request; can take a minute)…')
+  try {
+    const r = await writeDebrief(gem, config, dir, paths.knowledge)
+    notify('info', `Debrief written (${r.model}).`)
+    void shell.openPath(r.file)
+  } catch (err) {
+    notify('error', `Debrief failed: ${(err as Error).message.slice(0, 200)}`)
+  } finally {
+    debriefing = false
+  }
+}
 
 async function selfTest(): Promise<void> {
   const res = await runCaptureSelfTest(overlay, (on) => {
@@ -329,7 +353,8 @@ function buildTrayMenu(): void {
       }
     },
     { label: 'Reload config.yaml', click: applyConfigAndMenu },
-    { label: 'Open sessions folder', click: () => void shell.openPath(paths.sessions) },
+    { label: 'Debrief this meeting', enabled: !debriefing, click: () => void debrief() },
+    { label: 'Open sessions folder', click: () => void shell.openPath(sessionLog?.dir ?? paths.sessions) },
     { label: 'Open log folder', click: () => void shell.openPath(paths.logs) },
     { type: 'separator' },
     { label: 'Quit Cue', click: () => app.quit() }
@@ -399,7 +424,8 @@ app.whenReady().then(() => {
     pushState()
     if (tray) buildTrayMenu()
   })
-  engine = new AnswerEngine(() => gem, () => config, ctx, knowledge, emitAnswer, pushState)
+  sessionLog = new SessionLog(paths.sessions, () => config)
+  engine = new AnswerEngine(() => gem, () => config, ctx, knowledge, emitAnswer, pushState, (r) => sessionLog.answer(r))
 
   tray = new CueTray('Cue: meeting copilot')
   tray.onClick(() => overlay.toggle())

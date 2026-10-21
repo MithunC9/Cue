@@ -70,6 +70,10 @@ export interface CueConfig {
     /** false = you're on speakers: mic lines that just repeat the other side are dropped. */
     headphones: boolean
   }
+  sessions: {
+    /** Save Ctrl+Alt+S screenshots into the session folder. */
+    save_screenshots: boolean
+  }
   presentation: {
     /** The monitor showing your slides (the one you share in Zoom). */
     display: 'primary' | 'cursor' | number
@@ -146,6 +150,7 @@ export const DEFAULT_CONFIG: CueConfig = {
     mic_processing: true,
     headphones: true
   },
+  sessions: { save_screenshots: false },
   presentation: { display: 'primary', interval_ms: 3000, use_fast: true },
   screenshot: { display: 'cursor', max_width: 1600 },
   knowledge: { live_context_tokens: 6000, instant_answers: true, instant_min_confidence: 0.6, embeddings: true },

@@ -17,7 +17,8 @@
     "build": "electron-vite build && electron-builder --win --config electron-builder.yml",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "tsx --test test/*.test.ts",
-    "prep": "tsx src/prep/index.ts"
+    "prep": "tsx src/prep/index.ts",
+    "debrief": "tsx src/prep/debrief.ts"
   },
   "dependencies": {
     "@google/genai": "2.30.0",

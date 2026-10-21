@@ -5,9 +5,7 @@
 //   npm run prep -- --only=qa     regenerate one output (brief | qa | gaps | slides | embed)
 //   npm run prep -- --force       regenerate outputs that already exist
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
 import path from 'node:path'
-import { parseEnv } from 'node:util'
 import { ConfigError, loadConfig } from '../main/config'
 import { Gemini } from '../main/gemini/client'
 import { EMBED_DIMS, embedTexts } from '../main/gemini/embed'
@@ -16,6 +14,7 @@ import { FILES, writeChunks, writeEmbeddings, type SlidePrep } from '../main/kno
 import { addSecret, redact } from '../main/log'
 import { cleanSource, type QaEntry } from '../main/retrieval'
 import { checkCitations, digestText, makeBrief, makeGaps, makeQaBank, makeSlidePrep, renderQaMarkdown, selectDigest } from './brief'
+import { apiKey, userDataDir } from './env'
 import { ingest, type Manifest } from './ingest'
 
 const args = process.argv.slice(2)
@@ -23,22 +22,6 @@ const flag = (name: string) => args.includes(`--${name}`)
 const only = args.find((a) => a.startsWith('--only='))?.slice(7).split(',') ?? null
 const want = (step: string) => !only || only.includes(step)
 const say = (s: string) => console.log(redact(s))
-
-/** Same quota file the app uses, so prep and live answers share one budget. */
-export function userDataDir(): string {
-  if (process.env.CUE_USER_DATA) return process.env.CUE_USER_DATA
-  if (process.platform === 'win32') return path.join(process.env.APPDATA ?? path.join(homedir(), 'AppData', 'Roaming'), 'Cue')
-  if (process.platform === 'darwin') return path.join(homedir(), 'Library', 'Application Support', 'Cue')
-  return path.join(process.env.XDG_CONFIG_HOME ?? path.join(homedir(), '.config'), 'Cue')
-}
-
-function apiKey(root: string): string | null {
-  if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY.trim()
-  const env = path.join(root, '.env')
-  if (!existsSync(env)) return null
-  const v = (parseEnv(readFileSync(env, 'utf8')) as Record<string, string>).GEMINI_API_KEY
-  return v?.trim() || null
-}
 
 async function main(): Promise<void> {
   const root = process.env.CUE_HOME ? path.resolve(process.env.CUE_HOME) : process.cwd()
