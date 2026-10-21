@@ -342,6 +342,43 @@ body {
   font-size: 0.8em;
 }
 
+.slide-head {
+  font-weight: 600;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slide-no {
+  font-size: 0.78em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+
+.slide .point {
+  color: #e2e8f0;
+}
+
+.slide .likely {
+  margin-top: 4px;
+  font-size: 0.9em;
+  color: var(--them);
+}
+
+.slide .likely .lq {
+  font-weight: 700;
+}
+
+.slide .likely .la {
+  color: #cbd5e1;
+}
+
+.slide .dim {
+  color: var(--muted);
+}
+
 .slide.empty {
   color: #64748b;
   font-style: italic;

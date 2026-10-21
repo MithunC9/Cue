@@ -9,6 +9,9 @@ files:
 asarUnpack:
   - node_modules/koffi/**/*
   - node_modules/@koromix/**/*
+  - node_modules/tesseract.js/**/*
+  - node_modules/tesseract.js-core/**/*
+  - node_modules/@tesseract.js-data/**/*
 extraResources:
   - from: config.yaml
     to: config.default.yaml

@@ -73,8 +73,8 @@ export function App() {
       <Notices notices={ui.notices} />
       <Transcript lines={lines} listening={ui.listening} available={ui.listeningAvailable} />
       {ui.inputMode !== 'none' && <InputBox mode={ui.inputMode} />}
-      <AnswerCard card={card} />
-      {ui.presentation && <SlidePanel />}
+      {(card || !ui.presentation) && <AnswerCard card={card} />}
+      {ui.presentation && <SlidePanel slide={ui.slide} />}
       <StatusBar ui={ui} />
     </div>
   )

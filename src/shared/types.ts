@@ -70,10 +70,22 @@ export interface Notice {
 
 export type InputMode = 'none' | 'type' | 'apikey'
 
+export interface SlideView {
+  index: number
+  total: number
+  title: string
+  talkingPoints: string[]
+  likelyQuestion: string
+  answer: string
+  confidence: number
+  method: 'ocr' | 'fast' | 'cache'
+}
+
 export interface UiState {
   clickThrough: boolean
   inputMode: InputMode
   presentation: boolean
+  slide: SlideView | null
   listening: boolean
   listeningAvailable: boolean
   hotkeyFailures: string[]

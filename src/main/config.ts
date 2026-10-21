@@ -70,6 +70,13 @@ export interface CueConfig {
     /** false = you're on speakers: mic lines that just repeat the other side are dropped. */
     headphones: boolean
   }
+  presentation: {
+    /** The monitor showing your slides (the one you share in Zoom). */
+    display: 'primary' | 'cursor' | number
+    interval_ms: number
+    /** Let FAST look at the screen when OCR can't tell which slide it is. */
+    use_fast: boolean
+  }
   screenshot: {
     /** Which monitor Ctrl+Alt+S captures: the one under the mouse, the primary, or a number. */
     display: 'cursor' | 'primary' | number
@@ -139,6 +146,7 @@ export const DEFAULT_CONFIG: CueConfig = {
     mic_processing: true,
     headphones: true
   },
+  presentation: { display: 'primary', interval_ms: 3000, use_fast: true },
   screenshot: { display: 'cursor', max_width: 1600 },
   knowledge: { live_context_tokens: 6000, instant_answers: true, instant_min_confidence: 0.6, embeddings: true },
   ui: {
@@ -237,6 +245,8 @@ export function loadConfig(root: string): { config: CueConfig; file: string } {
   config.gemini.models.fast_fallbacks = asList(config.gemini.models.fast_fallbacks)
   if (config.gemini.tier !== 'paid') config.gemini.tier = 'free'
 
+  const presDisplay = config.presentation.display as unknown
+  if (typeof presDisplay === 'string' && /^\d+$/.test(presDisplay)) config.presentation.display = Number(presDisplay)
   const shotDisplay = config.screenshot.display as unknown
   if (typeof shotDisplay === 'string' && /^\d+$/.test(shotDisplay)) config.screenshot.display = Number(shotDisplay)
   const display = config.ui.display as unknown

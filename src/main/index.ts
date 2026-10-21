@@ -6,6 +6,7 @@ import { AnswerEngine } from './answers'
 import { AudioCapture } from './audio/capture'
 import { Listener } from './audio/listener'
 import { QuestionDetector } from './detector'
+import { SlideTracker } from './presentation'
 import { ConfigError, DEFAULT_CONFIG, loadConfig, type CueConfig, type HotkeyAction } from './config'
 import { MeetingContext } from './context'
 import { Gemini } from './gemini/client'
@@ -47,6 +48,7 @@ let capture: AudioCapture
 let listener: Listener
 let settings: Settings
 let detector: QuestionDetector
+let tracker: SlideTracker
 let themSpeaking = false
 
 function rendererUrl(page: string): { url?: string; file: string } {
@@ -65,6 +67,7 @@ function uiState(): UiState {
     clickThrough: overlay?.clickThrough ?? true,
     inputMode,
     presentation,
+    slide: presentation && tracker?.current ? { ...tracker.current } : null,
     listening,
     listeningAvailable: true,
     hotkeyFailures,
@@ -111,8 +114,30 @@ function setInputMode(mode: InputMode): void {
 }
 
 function togglePresentation(): void {
-  presentation = !presentation
-  notify('info', presentation ? 'Presentation mode on (slide tracking arrives in Phase 6).' : 'Presentation mode off.')
+  if (presentation) {
+    presentation = false
+    tracker.stop()
+    ctx.currentSlide = null
+    pushState()
+    return
+  }
+  if (!tracker.start()) {
+    notify('warn', 'No slides loaded. Set sources.deck in config.yaml (.pptx or .pdf) and run npm run prep.')
+    return
+  }
+  presentation = true
+  notify('info', `Presentation mode on: following slides on monitor "${config.presentation.display}".`)
+  pushState()
+}
+
+function setupPresentation(): void {
+  tracker = new SlideTracker(() => config, () => knowledge.kb, () => gem)
+  tracker.on('slide', (s) => {
+    const slide = knowledge.kb?.slides.find((x) => x.index === s.index)
+    ctx.currentSlide = slide ? { index: slide.index, title: slide.title, text: slide.text, notes: slide.notes } : null
+    log.info(`slide ${s.index}/${s.total} (${s.method}, ${s.confidence.toFixed(2)}): ${s.title}`)
+    pushState()
+  })
 }
 
 function toggleListening(): void {
@@ -379,6 +404,7 @@ app.whenReady().then(() => {
   tray = new CueTray('Cue: meeting copilot')
   tray.onClick(() => overlay.toggle())
   setupAudio()
+  setupPresentation()
   wireIpc()
   setupGemini()
   knowledge.load()
@@ -408,6 +434,7 @@ app.on('second-instance', () => overlay?.show())
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
   listener?.stop()
+  tracker?.stop()
   capture?.destroy()
 })
 app.on('window-all-closed', () => app.quit())
